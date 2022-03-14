@@ -1,0 +1,238 @@
+---
+title: "STA207 Course Project: How can vaccination protect death from COVID-19: evidence in different GDP level countries"
+date: "2022/03/14"
+author: "Xinyue Hu  ID:915521917"
+output: html_document
+---
+
+## 1. Preview
+The coronavirus pandemic is an ongoing pandemic with an outbreak in December 2019. This pandemic had caused great loss. As of 5:44pm CET, 17 February 2022, there have been 416,614,051 confirmed cases of COVID-19, including 5,844,097 deaths, reported to WHO. To better understand COVID-19, we proposed a two-way ANOVA model in studying the death ratio with regard to the country's GDP per capita (reflecting the strength of healthcare system) and the vaccination ratio. 
+
+## 2. Introduction
+Coronavirus disease (COVID-19) is an infectious disease caused by the SARS-CoV-2 virus. COVID‑19 transmits when people breathe in air contaminated by virus. Symptoms of COVID-19 include fever, cough, breathing difficulties, etc. Only two thirds of the patients develop the noticeable symptoms. Those who develop severe symptoms might need medical treatment, such as breathing aid devices in the hospitals. Also, the elderly are prone to more severe symptoms. It is been reported by CDC, as of 03/09/2022, 74.4% of the total deaths are within the 65-and-over age group, while there are only 21.4% and 4.2% for age groups 45-64 and under 45. 
+
+Despite of vairous types of vaccine, COVID-19 vaccines are intended to increase immunity against severe symptoms. They do not prevent as much on the transmission. A natural problem that comes to mind is that whether higher vaccination rate help reduce the case fatality ratio (CFR). Also, since the number of elderly and the healthcare performance are also the likely to be important factors for CFR. It is assumed that healthcare in a country can be reflected by its GDP per capita. 
+
+In this project, we study the relationship between each country's case fatality ratio with three factors, vaccination rate, elderly population ratio and GDP per capita. Through the investigation, we develop a two-way ANOVA model to explain CFR using vaccination ratio and GDP per capita. Elderly population ratio is highly correlated with GDP per captia and therefore, it is not considered in the ANOVA model. 
+
+The project is organized as the following:
+In section 3, the dataset used will be briefly introduced. In section 4, an exploratory data analysis is conducted to provide some insights on the final model we develop. In section 5, a two-way ANOVA model is developed to study the CFR with regard to GDP per capita and vaccination ratio. In section 6, a sensitivity analysis is conducted to verify the assumptions of our two-way ANOVA model. Finally, a conclusion is provided in section 7.
+
+
+## 3. Data Sources
+The main data source of this project is from [weekly WHO COVID-19 update](https://www.who.int/emergencies/diseases/novel-coronavirus-2019/situation-reports). This data set is maintained by WHO and updated constantly. The dataset consists of 8 columns, which are `Data_reported`,`Country_code`, `Country`, `WHO_region`, `New_cases`, `Cumulative_cases`, `New_deaths`, `Cumulative_deaths`. In specific, the regions contain "EMRO", "EURO", "AFRO",  "WPRO",  "AMRO",  "SEARO" and "Other" which correspond to Eastern Mediterranean region, European region, African region, Western Pacific region, region of Americas, South-east Asia region and other regions, correspondingly.
+
+
+
+The vaccination data is from [WHO vaccination data](https://covid19.who.int/info?openIndex=2), the used field is `PERSONS_FULLY_VACCINATED_PER100` which correponds to the cumulative number of persons fully vaccinated per 100 population of the corresponding country. We choose the fully vaccinated ratio since we believe the partial vaccinated people are still not immune to many acute symptoms. 
+
+
+
+The countrywise GDP per capita and elderly population percentage (percentage of 65 or older in the country's whole population) is from [Our World in Data](https://ourworldindata.org/covid-vaccinations), the used fields are `gdp_per_capita` and `aged_65_older`.
+
+
+The case fatality rate (CFR) is simply the number of confirmed deaths divided by the number of confirmed cases. However, in this project, we only care about the recent CFR by each country since we want to testify the benefit of vaccination. The vaccination ratio is reported on different dates and majority of the records are in January and Feburary. As a result. the CFR we compute only uses the death and new case number from January 1st 2022 to March 12th 2022. Note, this calculation is not exact, since there might be some patients who got COVID-19 before the time window and die during the time window. However, a 3-month averaged death ratio should render a reasonable estimate for CFR with the current reported vaccination ratio.
+
+
+
+## 4. Exploratory Data Analysis
+Here is a plot of worldwide total new case number throughout the time:
+
+```{r echo=FALSE,  warning=FALSE, include=FALSE}
+library(tidyverse)
+covid <- read_csv("https://covid19.who.int/WHO-COVID-19-global-data.csv")
+
+```
+
+```{r echo=FALSE,  warning=FALSE}
+new_case_agg = aggregate(covid$New_cases ~ covid$Date_reported, data = covid, FUN = sum)
+new_case_agg$`covid$Date_reported`=as.Date(new_case_agg$`covid$Date_reported`)
+plot(new_case_agg$`covid$Date_reported`, new_case_agg$`covid$New_cases`, main ="Covid-19 daily new case", xlab = "time", ylab = "Number of new cases",cex = 0.2)
+```
+
+
+We can see there seems to exist a seasonal trend in the plot. This might due to the transmission speed difference at different season (temperature). Also, we observe a huge spike starting from the end of 2021, due to the new Omicron variant. 
+
+
+Here is a plot of total new death number throughout the time:
+```{r echo=FALSE,  warning=FALSE}
+new_deaths_agg = aggregate(covid$New_deaths ~ covid$Date_reported, data = covid, FUN = sum)
+new_deaths_agg$`covid$Date_reported`=as.Date(new_deaths_agg$`covid$Date_reported`)
+plot(new_deaths_agg$`covid$Date_reported`, new_deaths_agg$`covid$New_deaths`, main ="Covid-19 daily new deaths", xlab = "time", ylab = "Number of deaths cases",cex = 0.2)
+```
+
+What we focus in this project is the case fatality ratio, which is defined as the following:
+$$Case \  Fatality \ ratio \ (CFR, in\%) = \frac{Number \ of \ deaths \ from \ disease}{Number \ of \ confirmed \ cases \ of \ disease} \times 100 $$
+The worldwide COVID-19 CFR is shown as the following:
+```{r echo=FALSE,  warning=FALSE}
+CFR = data.frame(matrix(ncol = 4, nrow = 800))
+
+CFR[1] = aggregate(covid$Cumulative_cases ~ covid$Date_reported, data = covid, FUN = sum)[1]
+CFR[2] = aggregate(covid$Cumulative_cases ~ covid$Date_reported, data = covid, FUN = sum)[2]
+CFR[3] = aggregate(covid$Cumulative_deaths ~ covid$Date_reported, data = covid, FUN = sum)[2]
+CFR[4] =CFR[3]/CFR[2]*100 
+CFR = CFR[18:800,]
+CFR$X1 = as.Date(CFR$X1)
+plot(CFR$X1,CFR$X4, main ="Case Fatality Ratio (CFR)", xlab = "time", ylab = "CFR %",cex = 0.2)
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+# data processing
+new_df = read.csv("covid-data.csv")
+new_df = new_df[c(1,2,3,4,5,6,8,9,43,52,53,54)]
+new_df$year = as.numeric(substr(new_df$date,1,4))
+new_df$month = as.numeric(substr(new_df$date,6,7))
+# get the data only for 2022
+new_df2 = new_df[(new_df$year==2022) & ((new_df$month == 1)|(new_df$month == 2)|(new_df$month == 3)),]
+
+df = new_df[new_df$date=="2022-03-12",]
+df = df[-9]
+df_0101 = new_df[new_df$date=="2022-01-01",]
+df_0101 = df_0101[c(1,5,7)]
+colnames(df_0101) = c("iso_code","total_cases01","total_deaths01")
+df = merge(df, df_0101, by="iso_code")
+df$death_rate = (df$total_deaths-df$total_deaths01)/
+                (df$total_cases-df$total_cases01) * 100
+
+df_vaccine = read.csv("vaccination-data.csv")
+df_vaccine = df_vaccine[c(2,9,11)]
+colnames(df_vaccine)[1] = "iso_code"
+df = merge(df, df_vaccine, by = "iso_code")
+df = na.omit(df)
+```
+We are interested in the relationship between each country's case fatality ratio with three factors, vaccination rate, elderly population ratio and GDP per capita. First of all, we plot the pairwise scatter plot of the original data to see if there is any trend:
+
+```{r echo=FALSE, warning=FALSE}
+# pairwise scatter plot
+pairs(df[c(16,9,11,18)])
+```
+
+It is observed that the case fatality ratio decreases as elderly percentage/GDP per capita/vaccination ratio increases. It makes sense for GDP and vaccination. However, for the elderly population percentage, this is counterintuitive. This is due the fact that the elderly population percentage is highly correlated withe the GDP per capita for a country, since developed countries are facing the ageing issue while developing countires have much younger population. This is the reason that we will not include elderly population percentage in our final ANOVA model. 
+
+We further argue that once the healthcare performance is adequate for a country, it would not have further influence on the CFR. We believe that the healthcare performance is directed reflected by the GDP per capita. Therefore, we only consider poor healthcare system vs satisfactory healthcare system, i.e. low GDP per capita countries vs the rest. We divide the countries into 2 levels, low GDP per capita and the rest. The threshold for low GDP is 10% quantile of the whole population, which is $1569.076 per year. 
+
+For the vaccination ratio, we also group the data into 3 groups: highly vaccinated (above 65.0455%), moderately vaccinated (16.4290% to 65.0455%) and poorly vaccinated (less than 16.4290%). The thresholds are lower quantile (65.0455%) and upper quantile (16.4290%) of all the countries in record.
+
+We now show two main effect plots to see if the two factors provide evidence on the difference in case fatality ratio:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(gplots)
+# histgram plots
+df$ageing = as.factor((df$aged_65_older>21)*2 + (df$aged_65_older<=21 & df$aged_65_older>5) *1)
+# get the 20% and 80% quantiles of Percentage of Persons Fully Vaccinated
+#quantile(df$PERSONS_FULLY_VACCINATED_PER100,c(0.25,0.75))
+df$vaccine = as.factor((df$PERSONS_FULLY_VACCINATED_PER100>65.0455) * 2 +
+  (df$PERSONS_FULLY_VACCINATED_PER100<=65.0455   & 
+  df$PERSONS_FULLY_VACCINATED_PER100>16.4290) * 1 )
+# get the 10% quantiles of gpd per capita
+#quantile(df$gdp_per_capita,0.1)
+#             10% 
+#            1569.076  
+df$gdp = as.factor((df$gdp_per_capita>1569.076 ) * 1)
+
+levels(df$gdp) = c("low","other")
+levels(df$vaccine) = c("poor","moderate","high")
+
+# main effect plot
+par(mfrow=c(1,2))
+# Main effect plot for gdp
+plotmeans(death_rate~gdp,data=df,xlab="GDP per capita",ylab="CFR",
+          main="Main  effect, GDP per capita",cex.lab=1.5) 
+# Main effect plot for ingredient 2
+plotmeans(death_rate~vaccine,data=df,xlab="Vaccination Ratio",ylab="CFR", 
+          main="Main effect, vaccination ratio",cex.lab=1.5) 
+
+```
+
+We can easily observe there exist obvious main effect for both factors. To testify this, we develop a two-way ANOVA model, which is documented in the following section.
+
+
+
+
+## 5. Two-way ANOVA Model
+We decide to fit a two-way ANOVA model for the case fatality ratio. The model looks like the following:
+$$
+Y_{ijk} = \mu_{\cdot \cdot} + \alpha_i + \beta_j + \epsilon_{ijk} \; \; 
+k=1,\cdots, n, \; j=1,\cdots, b, \; i = 1,\cdots,a
+$$
+where $\mu$ is the over/grand mean, $\alpha_i$ and $\beta_i$ are `GDP per capita` and `Vaccination ratio`'s main effects, with the assumption $\epsilon_{ijk}$ are i.i.d. $N(0,\sigma^2)$.
+
+Interaction term between `GDP per capita` and `Vaccination ratio` is not considered due to lacking of enough observations: among the low GDP countries, there does not exist a country having a high vaccination ratio. 
+
+The model fitting result is shown as the following:
+
+```{r echo = FALSE, message=FALSE, warning=FALSE}
+anova.fit<-aov(df$death_rate~df$gdp+df$vaccine,data=df)
+summary(anova.fit)
+anova.fit$coefficients
+```
+
+The two factors are statistically significant at confidence level 99%. From the coefficient of the ANOVA model, we see that for a country with higher GDP, the death rate is lower; also, the higher vaccination ratio will be beneficial for death ratio reduction. 
+
+## 6. Sensitivity Analysis
+
+In this section, we conduct a sensitivity analysis. 
+```{r echo = FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Diagnostic plots
+options(repr.plot.width=12, repr.plot.height=6)
+par(mfrow=c(1,2))
+plot(anova.fit,cex.lab=1.2,which=1:2)
+par(mfrow=c(1,1))
+```
+
+From the plots, we can easily identify 3 outliers. We delete the 3 observations and fit the ANOVA model again:
+
+```{r echo = FALSE, message=FALSE, warning=FALSE}
+df2 = df[df$death_rate<3,]
+anova.fit<-aov(df2$death_rate~df2$gdp+df2$vaccine,data=df2)
+summary(anova.fit)
+anova.fit$coefficients
+```
+
+Again, both factors are statistically significant at confidence level 99%. We further examine the residuals:
+
+```{r echo = FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# Diagnostic plots
+options(repr.plot.width=12, repr.plot.height=6)
+par(mfrow=c(1,2))
+plot(anova.fit,cex.lab=1.2,which=1:2)
+par(mfrow=c(1,1))
+```
+
+
+We found that the data is slightly heavy-tailed. But in general, the residual plot and QQ plot looks acceptable. We therefore conclude that the model assumptions are valid in our two-way ANOVA model. 
+
+# 7.Conclusion and Future Work
+In this project, we studied the influencing factors of COVID-19 case fatality ratio at country level -  vaccination ratio. Through the two-way ANOVA model we tested, we conclude that vaccination and healthcare strength is vital to prevent death from COVID-19 cases, based on the assumpiton that low GDP per capita means poor healthcare performance. Thus, to reduce the case fatality ratio, it is beneficial for all the countries to boost vaccination among their citizens. 
+
+Here, we also list the caveats of this project:
+
+- There are not enough data points to examine the interaction between GDP and vaccination ratio. This might also due to the fact that low GDP per capita countries (less developed countries) usually have a lower vaccination ratio. This also indicate partial correlation between the two factors. 
+
+- Case fatality ratio computed for the recent three month is not exact. More sophisticated technique is needed to obtain a better estimate.
+
+For the future work, it is interesting to generate more data points using historical data. A few month before, when vaccination ratio is low, the data might tell more story. The historical vaccination ratio data can be incorporated into the current study.
+
+
+
+## Reference
+WHO COVID-19 data
+https://covid19.who.int/ 
+
+WHO COVID-19 vaccines
+https://www.who.int/emergencies/diseases/novel-coronavirus-2019/covid-19-vaccines 
+
+COVID-19 Pandemic Wikipedia
+https://en.wikipedia.org/wiki/COVID-19 
+
+
+## Session info {-}
+This work and the dataset can be found on Github. 
+https://github.com/Xinyue-H/STA207-Final-Project.git 
+
+I would like to express my genuine gratitude to Prof. Shizhe Chen, and my teammates Bo Zhang, Xiquan Jiang and Cindy Li for discussion.
+
+```{r}
+sessionInfo()
+```
